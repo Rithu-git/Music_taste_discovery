@@ -98,11 +98,28 @@ def find_track(q):
     return None if m.empty else m.popularity.idxmax()
 
 
-def recommend_core(seed_idx, n=10):
+def recommend_core(seed_idx, n=10, genre_w=0.15, pop_w=0.10, max_per_artist=2):
     v = X[seed_idx].mean(axis=0, keepdims=True)
     sim = cosine_similarity(v, X)[0]
-    sim[seed_idx] = -1
-    top = np.argsort(-sim)[:n]
+
+    # hybrid score: audio similarity + genre match + popularity
+    seed_genres = set(df.track_genre.iloc[seed_idx])
+    score = sim + genre_w * df.track_genre.isin(seed_genres).values + pop_w * (df.popularity.values / 100)
+
+    seed_titles = set(df.track_name.iloc[seed_idx].str.lower())
+    order = np.argsort(-score)
+    top, artist_count = [], {}
+    for i in order[:2000]:
+        if i in seed_idx or df.track_name.iat[i].lower() in seed_titles:
+            continue
+        a = df.artists.iat[i]
+        if artist_count.get(a, 0) >= max_per_artist:
+            continue
+        artist_count[a] = artist_count.get(a, 0) + 1
+        top.append(i)
+        if len(top) == n:
+            break
+    top = np.array(top)
     return top, sim[top]
 
 
